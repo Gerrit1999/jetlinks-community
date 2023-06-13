@@ -2,10 +2,6 @@ package org.jetlinks.community.network.rocketmq.gateway.device;
 
 import com.demo.MyProtocolSupportProvider;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.rocketmq.client.consumer.DefaultMQPushConsumer;
-import org.apache.rocketmq.client.consumer.listener.ConsumeConcurrentlyStatus;
-import org.apache.rocketmq.client.consumer.listener.MessageListenerConcurrently;
-import org.apache.rocketmq.client.exception.MQClientException;
 import org.apache.rocketmq.client.producer.DefaultMQProducer;
 import org.apache.rocketmq.client.producer.SendResult;
 import org.apache.rocketmq.common.message.Message;
@@ -16,6 +12,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.context.ApplicationContext;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import javax.annotation.Resource;
 import java.text.SimpleDateFormat;
@@ -34,14 +33,17 @@ class RocketMQClientDeviceGatewayTest {
         MyProtocolSupportProvider protocolSupportProvider = new MyProtocolSupportProvider();
         RocketMQClient client = new RocketMQClient("client_0", "127.0.0.1", 9876);
 
-        for (int i = 0; i < 10; i++) {
-            RocketMQClientDeviceGateway gateway = new RocketMQClientDeviceGateway("gateway_" + i, client);
-            gateway.setProtocol(protocolSupportProvider.create(serviceContext));
-            gateway.doStartup()
-                .doOnSuccess(nil -> log.info("{} startup success", gateway.getId()))
-                .doOnError(e -> log.error("gateway_{} startup error", gateway.getId(), e))
-                .subscribe();
-        }
+        // 监听100个网关设备的消息
+        Flux.range(0, 100)
+            .flatMap(i -> Mono.defer(() -> {
+                RocketMQClientDeviceGateway gateway = new RocketMQClientDeviceGateway("gateway_" + i, client);
+                gateway.setProtocol(protocolSupportProvider.create(serviceContext));
+                return gateway.doStartup()
+                    .subscribeOn(Schedulers.parallel())
+                    .doOnSuccess(nil -> log.info("{} startup success", gateway.getId()))
+                    .doOnError(e -> log.error("gateway_{} startup error", gateway.getId(), e));
+            }))
+            .subscribe();
 
         Thread.currentThread().join();
     }
@@ -68,42 +70,5 @@ class RocketMQClientDeviceGatewayTest {
         }
         // 一旦producer不再使用，关闭producer
         producer.shutdown();
-    }
-
-    @Test
-    void recv() throws InterruptedException, MQClientException {
-        // 同一消费者组, 不同topic的消息必须由同一个consumer对象来订阅
-        for (int i = 0; i < 5; i++) {
-            DefaultMQPushConsumer consumer = new DefaultMQPushConsumer("group_client_" + i);
-            consumer.setNamesrvAddr("127.0.0.1:9876");
-            // 订阅一个或多个topic，并指定tag过滤条件，这里指定*表示接收所有tag的消息
-            consumer.subscribe("TopicTest", "*");
-            // 注册回调接口来处理从Broker中收到的消息
-            consumer.registerMessageListener((MessageListenerConcurrently) (msgs, context) -> {
-                log.info("Receive Message: {}", msgs);
-                // 返回消息消费状态，ConsumeConcurrentlyStatus.CONSUME_SUCCESS为消费成功
-                return ConsumeConcurrentlyStatus.CONSUME_SUCCESS;
-            });
-            // 启动Consumer
-            consumer.start();
-            log.info("start");
-        }
-        for (int i = 5; i < 10; i++) {
-            DefaultMQPushConsumer consumer = new DefaultMQPushConsumer("group_client_" + i);
-            consumer.setNamesrvAddr("127.0.0.1:9876");
-            // 订阅一个或多个topic，并指定tag过滤条件，这里指定*表示接收所有tag的消息
-            consumer.subscribe("TopicTest" + i, "*");
-            // 注册回调接口来处理从Broker中收到的消息
-            consumer.registerMessageListener((MessageListenerConcurrently) (msgs, context) -> {
-                log.info("Receive Message: {}", msgs);
-                // 返回消息消费状态，ConsumeConcurrentlyStatus.CONSUME_SUCCESS为消费成功
-                return ConsumeConcurrentlyStatus.CONSUME_SUCCESS;
-            });
-            // 启动Consumer
-            consumer.start();
-            log.info("start");
-        }
-
-        Thread.currentThread().join();
     }
 }

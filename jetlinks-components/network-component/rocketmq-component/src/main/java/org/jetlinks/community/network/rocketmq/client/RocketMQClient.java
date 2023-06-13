@@ -58,6 +58,11 @@ public class RocketMQClient implements Network {
         return true;
     }
 
+    /**
+     * 同一NameServer, 同一消费者组, 不同topic的消息必须由同一个consumer对象来订阅
+     * 或者设置不同的消费者组
+     * 否则可能导致消息延迟甚至消息丢失等问题
+     */
     public Flux<RocketMQMessage> subscribe(List<MqRoute> routes, String group) {
         return Flux.create(sink -> {
             try {
@@ -80,6 +85,7 @@ public class RocketMQClient implements Network {
                 });
                 // 启动Consumer
                 consumer.start();
+                consumers.add(consumer);
                 // 在取消订阅时停止 Consumer
                 sink.onDispose(() -> {
                     consumer.shutdown();

@@ -11,7 +11,6 @@ import org.jetlinks.core.message.codec.DefaultTransport;
 import org.jetlinks.core.message.codec.DeviceMessageCodec;
 import org.jetlinks.core.message.codec.FromDeviceMessageContext;
 import org.jetlinks.core.route.MqRoute;
-import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
@@ -40,7 +39,6 @@ public class RocketMQClientDeviceGateway extends AbstractDeviceGateway {
 
     public void setProtocol(Mono<ProtocolSupport> protocol) {
         this.protocol = Objects.requireNonNull(protocol, "protocol");
-        // TODO
         this.codecMono = protocol.flatMap(p -> p.getMessageCodec(DefaultTransport.MQ));
     }
 
@@ -72,12 +70,12 @@ public class RocketMQClientDeviceGateway extends AbstractDeviceGateway {
             .then();
     }
 
-    protected Disposable doSubscribe(List<MqRoute> mqRoutes, String group) {
-        return client.subscribe(mqRoutes, group)
+    protected void doSubscribe(List<MqRoute> mqRoutes, String group) {
+        client.subscribe(mqRoutes, group)
             .flatMap(message -> codecMono   // 将每个 RocketMQ 消息解码为消息流
                 .flatMapMany(codec -> codec.decode(FromDeviceMessageContext.of(null, message)))
                 .flatMap(msg -> {
-                    log.info("receive message: {}", msg);
+                    log.info("{} receive message: {}", group, msg);
                     return Mono.empty();
                 })
                 .subscribeOn(Schedulers.parallel()) // 在并行调度器上执行处理
