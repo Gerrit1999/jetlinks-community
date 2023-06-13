@@ -43,6 +43,7 @@
         <swagger.version>2.2.8</swagger.version>
         <jna.version>5.12.1</jna.version>
         <aliyun.sdk.core>4.5.2</aliyun.sdk.core>
+        <rocketmq.version>5.1.0</rocketmq.version>
     </properties>
 
 

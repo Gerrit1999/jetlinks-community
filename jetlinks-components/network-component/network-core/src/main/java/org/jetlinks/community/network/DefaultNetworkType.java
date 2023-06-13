@@ -31,6 +31,8 @@ public enum DefaultNetworkType implements NetworkType, EnumDict<String> {
     COAP_CLIENT("CoAP客户端"),
     COAP_SERVER("CoAP服务"),
 
+    ROCKETMQ_CLIENT("RocketMQ客户端"),
+
     ;
 
     static {
