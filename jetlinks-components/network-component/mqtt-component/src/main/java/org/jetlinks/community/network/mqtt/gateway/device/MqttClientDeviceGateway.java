@@ -5,7 +5,11 @@ import lombok.EqualsAndHashCode;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.hswebframework.web.logger.ReactiveLogger;
+import org.jetlinks.community.gateway.AbstractDeviceGateway;
+import org.jetlinks.community.gateway.DeviceGatewayHelper;
+import org.jetlinks.community.network.mqtt.client.MqttClient;
 import org.jetlinks.community.network.mqtt.gateway.device.session.MqttClientSession;
+import org.jetlinks.community.network.mqtt.gateway.device.session.UnknownDeviceMqttClientSession;
 import org.jetlinks.core.ProtocolSupport;
 import org.jetlinks.core.device.DeviceOperator;
 import org.jetlinks.core.device.DeviceRegistry;
@@ -17,11 +21,6 @@ import org.jetlinks.core.message.codec.FromDeviceMessageContext;
 import org.jetlinks.core.message.codec.Transport;
 import org.jetlinks.core.route.MqttRoute;
 import org.jetlinks.core.utils.TopicUtils;
-import org.jetlinks.community.gateway.AbstractDeviceGateway;
-import org.jetlinks.community.gateway.GatewayState;
-import org.jetlinks.community.network.mqtt.client.MqttClient;
-import org.jetlinks.community.network.mqtt.gateway.device.session.UnknownDeviceMqttClientSession;
-import org.jetlinks.community.gateway.DeviceGatewayHelper;
 import org.jetlinks.supports.server.DecodedClientMessageHandler;
 import reactor.core.Disposable;
 import reactor.core.publisher.Mono;
@@ -29,7 +28,11 @@ import reactor.core.scheduler.Schedulers;
 import reactor.util.function.Tuple2;
 import reactor.util.function.Tuples;
 
-import java.util.*;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -85,12 +88,12 @@ public class MqttClientDeviceGateway extends AbstractDeviceGateway {
                 .cast(MqttRoute.class)
                 .collectList()
                 .doOnEach(ReactiveLogger
-                              .onNext(routes -> {
-                                  //协议包里没有配置Mqtt Topic信息
-                                  if (CollectionUtils.isEmpty(routes)) {
-                                      log.warn("The protocol [{}] is not configured with topics information", support.getId());
-                                  }
-                              }))
+                    .onNext(routes -> {
+                        //协议包里没有配置Mqtt Topic信息
+                        if (CollectionUtils.isEmpty(routes)) {
+                            log.warn("The protocol [{}] is not configured with topics information", support.getId());
+                        }
+                    }))
                 .doOnNext(this::doReloadRoute))
             .then();
     }
@@ -139,29 +142,29 @@ public class MqttClientDeviceGateway extends AbstractDeviceGateway {
         return mqttClient
             .subscribe(Collections.singletonList(topic), qos)
             .filter(msg -> isStarted())
-            .flatMap(mqttMessage -> codecMono
+            .flatMap(mqttMessage -> codecMono   // 将每个 MQTT 消息解码为消息流
                 .flatMapMany(codec -> codec
                     .decode(FromDeviceMessageContext.of(
                         new UnknownDeviceMqttClientSession(getId(), mqttClient, monitor),
                         mqttMessage,
-                        registry)))
+                        registry))) // 解码 MQTT 消息
                 .flatMap(message -> {
-                    monitor.receivedMessage();
+                    monitor.receivedMessage();  // 记录接收到的消息
                     return helper
-                        .handleDeviceMessage((DeviceMessage) message,
-                                             device -> createDeviceSession(device, mqttClient),
-                                             ignore -> {
-                                             },
-                                             () -> log.warn("can not get device info from message:{},{}", mqttMessage.print(), message)
+                        .handleDeviceMessage((DeviceMessage) message,   // 处理设备消息
+                            device -> createDeviceSession(device, mqttClient),  // 处理设备消息时的回调方法
+                            ignore -> {
+                            },
+                            () -> log.warn("can not get device info from message:{},{}", mqttMessage.print(), message)
                         );
-                })
-                .subscribeOn(Schedulers.parallel())
-                .onErrorResume((err) -> {
+                })  // 执行设备消息处理逻辑
+                .subscribeOn(Schedulers.parallel()) // 在并行调度器上执行处理
+                .onErrorResume(err -> {
                     log.error("handle mqtt client message error:{}", mqttMessage, err);
                     return Mono.empty();
                 }), Integer.MAX_VALUE)
-            .contextWrite(ReactiveLogger.start("gatewayId", getId()))
-            .subscribe();
+            .contextWrite(ReactiveLogger.start("gatewayId", getId()))   // 添加日志记录器的上下文
+            .subscribe();   // 订阅消息流并返回 Disposable 对象
     }
 
     @AllArgsConstructor(staticName = "of")

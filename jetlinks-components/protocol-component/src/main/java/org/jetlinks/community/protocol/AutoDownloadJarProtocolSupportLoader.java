@@ -4,38 +4,34 @@ import lombok.Generated;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.hswebframework.web.bean.FastBeanCopier;
-import org.jetlinks.core.ProtocolSupport;
-import org.jetlinks.core.spi.ServiceContext;
 import org.jetlinks.community.io.file.FileManager;
 import org.jetlinks.community.utils.TimeUtils;
+import org.jetlinks.core.ProtocolSupport;
+import org.jetlinks.core.spi.ServiceContext;
 import org.jetlinks.supports.protocol.management.ProtocolSupportDefinition;
 import org.jetlinks.supports.protocol.management.jar.JarProtocolSupportLoader;
 import org.jetlinks.supports.protocol.management.jar.ProtocolClassLoader;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.core.io.Resource;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.core.io.buffer.DataBufferUtils;
-import org.springframework.stereotype.Component;
-import org.springframework.util.StreamUtils;
 import org.springframework.util.StringUtils;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import javax.annotation.PreDestroy;
-import java.io.*;
-import java.net.URL;
-import java.nio.channels.AsynchronousFileChannel;
+import java.io.File;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
 import java.time.Duration;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeoutException;
 
-import static java.nio.file.StandardOpenOption.*;
+import static java.nio.file.StandardOpenOption.CREATE;
+import static java.nio.file.StandardOpenOption.CREATE_NEW;
+import static java.nio.file.StandardOpenOption.TRUNCATE_EXISTING;
+import static java.nio.file.StandardOpenOption.WRITE;
 
 /**
  * 自动下载并缓存协议包，
@@ -63,7 +59,7 @@ public class AutoDownloadJarProtocolSupportLoader extends JarProtocolSupportLoad
                                                 FileManager fileManager) {
         this.webClient = builder.build();
         this.fileManager = fileManager;
-        tempPath = new File(System.getProperty("jetlinks.protocol.temp.path", "./data/protocols"));
+        tempPath = new File(System.getProperty("jetlinks.protocol.temp.path", "E:\\dev\\jetlinks-community\\data\\protocols"));
         tempPath.mkdirs();
     }
 
