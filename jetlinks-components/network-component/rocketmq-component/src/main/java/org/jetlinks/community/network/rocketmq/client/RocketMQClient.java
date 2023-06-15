@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.rocketmq.client.consumer.DefaultMQPushConsumer;
 import org.apache.rocketmq.client.consumer.listener.ConsumeConcurrentlyStatus;
 import org.apache.rocketmq.client.consumer.listener.MessageListenerConcurrently;
+import org.apache.rocketmq.common.consumer.ConsumeFromWhere;
 import org.apache.rocketmq.common.message.MessageExt;
 import org.jetlinks.community.network.DefaultNetworkType;
 import org.jetlinks.community.network.Network;
@@ -67,11 +68,12 @@ public class RocketMQClient implements Network {
         return Flux.create(sink -> {
             try {
                 DefaultMQPushConsumer consumer = new DefaultMQPushConsumer(group);
+                consumer.setConsumeFromWhere(ConsumeFromWhere.CONSUME_FROM_TIMESTAMP);
                 consumer.setNamesrvAddr(ip + ":" + port);
                 // 订阅一个或多个topic，并指定tag过滤条件，这里指定*表示接收所有tag的消息
                 for (MqRoute route : routes) {
                     String topic = route.getTopic();
-                    String subExpression = route.getTag();
+                    String subExpression = route.getSubExpression();
                     consumer.subscribe(topic, subExpression);
                 }
                 // 注册回调接口来处理从Broker中收到的消息

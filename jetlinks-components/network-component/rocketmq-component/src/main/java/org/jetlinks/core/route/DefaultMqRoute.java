@@ -6,13 +6,13 @@ import lombok.Getter;
 class DefaultMqRoute implements MqRoute {
 
     private final String topic;
-    private final String tag;
+    private final String subExpression;
     private final String description;
     private final String example;
 
-    DefaultMqRoute(String topic, String tag, String description, String example) {
+    DefaultMqRoute(String topic, String subExpression, String description, String example) {
         this.topic = topic;
-        this.tag = tag;
+        this.subExpression = subExpression;
         this.description = description;
         this.example = example;
     }

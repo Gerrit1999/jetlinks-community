@@ -11,7 +11,7 @@ public interface MqRoute extends Route {
 
     String getTopic();
 
-    String getTag();
+    String getSubExpression();
 
     @Override
     default String getAddress() {
