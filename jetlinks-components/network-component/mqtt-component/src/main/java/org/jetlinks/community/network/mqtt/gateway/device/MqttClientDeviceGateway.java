@@ -79,22 +79,22 @@ public class MqttClientDeviceGateway extends AbstractDeviceGateway {
     }
 
     protected Mono<Void> reload() {
-
         return this
-            .getProtocol()
+            .getProtocol()  // 获取协议包
             .flatMap(support -> support
+                // 从协议包中获取Mqtt的路由
                 .getRoutes(DefaultTransport.MQTT)
                 .filter(MqttRoute.class::isInstance)
                 .cast(MqttRoute.class)
                 .collectList()
                 .doOnEach(ReactiveLogger
                     .onNext(routes -> {
-                        //协议包里没有配置Mqtt Topic信息
+                        // 协议包里没有配置Mqtt Topic信息
                         if (CollectionUtils.isEmpty(routes)) {
                             log.warn("The protocol [{}] is not configured with topics information", support.getId());
                         }
                     }))
-                .doOnNext(this::doReloadRoute))
+                .doOnNext(this::doReloadRoute)) // 进行路由重载
             .then();
     }
 
@@ -102,17 +102,17 @@ public class MqttClientDeviceGateway extends AbstractDeviceGateway {
         Map<RouteKey, Tuple2<Integer, Disposable>> readyToRemove = new HashMap<>(this.routes);
 
         for (MqttRoute route : routes) {
-            //不是上行topic,不订阅
+            // 不是上行topic, 不订阅
             if (!route.isUpstream()) {
                 continue;
             }
             String topic = convertToMqttTopic(route.getTopic());
             RouteKey key = RouteKey.of(topic, route.getQos());
             readyToRemove.remove(key);
-            //尝试更新订阅
+            // 尝试更新订阅
             this.routes.compute(key, (_key, old) -> {
                 if (old != null) {
-                    //QoS没变，不用重新订阅
+                    // QoS没变，不用重新订阅
                     if (old.getT1().equals(_key.qos)) {
                         return old;
                     } else {
@@ -123,7 +123,7 @@ public class MqttClientDeviceGateway extends AbstractDeviceGateway {
                 return Tuples.of(_key.qos, doSubscribe(_key.topic, _key.qos));
             });
         }
-        //取消订阅协议包里没有的topic信息
+        // 取消订阅协议包里没有的topic信息
         for (Map.Entry<RouteKey, Tuple2<Integer, Disposable>> value : readyToRemove.entrySet()) {
             this.routes.remove(value.getKey());
             value.getValue().getT2().dispose();
@@ -142,12 +142,12 @@ public class MqttClientDeviceGateway extends AbstractDeviceGateway {
         return mqttClient
             .subscribe(Collections.singletonList(topic), qos)
             .filter(msg -> isStarted())
-            .flatMap(mqttMessage -> codecMono   // 将每个 MQTT 消息解码为消息流
+            .flatMap(mqttMessage -> codecMono   // 将每条MQTT消息解码为消息流
                 .flatMapMany(codec -> codec
                     .decode(FromDeviceMessageContext.of(
                         new UnknownDeviceMqttClientSession(getId(), mqttClient, monitor),
                         mqttMessage,
-                        registry))) // 解码 MQTT 消息
+                        registry))) // 解码MQTT消息
                 .flatMap(message -> {
                     monitor.receivedMessage();  // 记录接收到的消息
                     return helper

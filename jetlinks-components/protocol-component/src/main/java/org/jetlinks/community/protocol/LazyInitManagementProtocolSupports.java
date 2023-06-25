@@ -38,12 +38,12 @@ public class LazyInitManagementProtocolSupports extends StaticProtocolSupports i
     private Duration loadTimeOut = Duration.ofSeconds(30);
 
     public void init() {
-
         clusterManager.<ProtocolSupportDefinition>getTopic("_protocol_changed")
-                      .subscribe()
-                      .subscribe(protocol -> this.init(protocol).subscribe());
+            .subscribe()
+            .subscribe(protocol -> this.init(protocol).subscribe());
 
         try {
+            // 从缓存中获取协议信息
             manager
                 .loadAll()
                 .filter(de -> de.getState() == 1)
@@ -52,7 +52,6 @@ public class LazyInitManagementProtocolSupports extends StaticProtocolSupports i
         } catch (Throwable e) {
             log.error("load protocol error", e);
         }
-
     }
 
     public Mono<Void> init(ProtocolSupportDefinition definition) {
@@ -70,12 +69,16 @@ public class LazyInitManagementProtocolSupports extends StaticProtocolSupports i
 
             log.debug("{} protocol:{}", operation, definition);
 
+            // 使用协议加载器加载协议
             return loader
                 .load(definition)
                 .doOnNext(e -> {
+                    // 初始化协议
                     e.init(definition.getConfiguration());
                     log.debug("{} protocol[{}] success: {}", operation, definition.getId(), e);
+                    // 缓存
                     configProtocolIdMapping.put(definition.getId(), e.getId());
+                    // 注册协议
                     consumer.accept(e);
                 })
                 .onErrorResume((e) -> {

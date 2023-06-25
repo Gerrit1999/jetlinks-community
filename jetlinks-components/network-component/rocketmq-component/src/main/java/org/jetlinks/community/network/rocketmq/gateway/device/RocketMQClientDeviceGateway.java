@@ -60,7 +60,7 @@ public class RocketMQClientDeviceGateway extends AbstractDeviceGateway {
                 .cast(MqRoute.class)
                 .collectList()
                 .doOnEach(ReactiveLogger.onNext(routes -> {
-                    // 协议包里没有配置Mq Topic信息
+                    // 协议包里没有配置路由信息
                     if (CollectionUtils.isEmpty(routes)) {
                         log.warn("The protocol [{}] is not configured with topics information", support.getId());
                     }
@@ -72,7 +72,7 @@ public class RocketMQClientDeviceGateway extends AbstractDeviceGateway {
 
     protected void doSubscribe(List<MqRoute> mqRoutes, String group) {
         client.subscribe(mqRoutes, group)
-            .flatMap(message -> codecMono   // 将每个 RocketMQ 消息解码为消息流
+            .flatMap(message -> codecMono   // 将每条MQ消息解码为消息流
                 .flatMapMany(codec -> codec.decode(FromDeviceMessageContext.of(null, message)))
                 .flatMap(msg -> {
                     log.info("{} receive message: {}", group, msg);

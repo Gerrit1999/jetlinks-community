@@ -1,15 +1,21 @@
 package org.jetlinks.community.network.manager.service;
 
 import lombok.extern.slf4j.Slf4j;
-import org.hswebframework.web.crud.events.*;
+import org.hswebframework.web.crud.events.EntityBeforeDeleteEvent;
+import org.hswebframework.web.crud.events.EntityCreatedEvent;
+import org.hswebframework.web.crud.events.EntityModifyEvent;
+import org.hswebframework.web.crud.events.EntityPrepareCreateEvent;
+import org.hswebframework.web.crud.events.EntityPrepareModifyEvent;
+import org.hswebframework.web.crud.events.EntityPrepareSaveEvent;
+import org.hswebframework.web.crud.events.EntitySavedEvent;
 import org.hswebframework.web.id.IDGenerator;
-import org.jetlinks.core.ProtocolSupport;
 import org.jetlinks.community.gateway.DeviceGateway;
 import org.jetlinks.community.gateway.DeviceGatewayManager;
 import org.jetlinks.community.gateway.supports.DeviceGatewayProvider;
 import org.jetlinks.community.network.manager.entity.DeviceGatewayEntity;
 import org.jetlinks.community.network.manager.enums.DeviceGatewayState;
 import org.jetlinks.community.reference.DataReferenceManager;
+import org.jetlinks.core.ProtocolSupport;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.event.EventListener;
 import org.springframework.core.annotation.Order;
@@ -22,7 +28,6 @@ import java.time.Duration;
 import java.util.List;
 
 /**
- *
  * @author zhouhao
  * @since 2.0
  */
@@ -80,8 +85,8 @@ public class DeviceGatewayEventHandler implements CommandLineRunner {
     public void handleCreated(EntityCreatedEvent<DeviceGatewayEntity> event) {
         event.async(
             reloadGateway(Flux
-                              .fromIterable(event.getEntity())
-                              .filter(gateway -> gateway.getState() == DeviceGatewayState.enabled))
+                .fromIterable(event.getEntity())
+                .filter(gateway -> gateway.getState() == DeviceGatewayState.enabled))
         );
     }
 
@@ -89,8 +94,8 @@ public class DeviceGatewayEventHandler implements CommandLineRunner {
     public void handleSaved(EntitySavedEvent<DeviceGatewayEntity> event) {
         event.async(
             reloadGateway(Flux
-                              .fromIterable(event.getEntity())
-                              .filter(gateway -> gateway.getState() == DeviceGatewayState.enabled))
+                .fromIterable(event.getEntity())
+                .filter(gateway -> gateway.getState() == DeviceGatewayState.enabled))
         );
     }
 
@@ -103,8 +108,8 @@ public class DeviceGatewayEventHandler implements CommandLineRunner {
                     return Mono.empty();
                 }
                 return reloadGateway(Flux
-                                         .fromIterable(event.getAfter())
-                                         .filter(gateway -> gateway.getState() == DeviceGatewayState.enabled));
+                    .fromIterable(event.getAfter())
+                    .filter(gateway -> gateway.getState() == DeviceGatewayState.enabled));
             })
         );
     }
@@ -145,14 +150,14 @@ public class DeviceGatewayEventHandler implements CommandLineRunner {
     // 检验网关配置参数
     private Mono<Void> gatewayConfigValidate(List<DeviceGatewayEntity> entityList) {
         return Flux.fromIterable(entityList)
-                   .filter(entity -> entity.getConfiguration() != null)
-                   .flatMap(entity ->
-                                Mono.justOrEmpty(deviceGatewayManager.getProvider(entity.getProvider()))
-                                    .switchIfEmpty(Mono.error(
-                                        () -> new UnsupportedOperationException("error.unsupported_device_gateway_provider")
-                                    ))
-                                    .flatMap(gatewayProvider -> gatewayProvider.createDeviceGateway(entity.toProperties())))
-                   .then();
+            .filter(entity -> entity.getConfiguration() != null)
+            .flatMap(entity ->
+                Mono.justOrEmpty(deviceGatewayManager.getProvider(entity.getProvider()))
+                    .switchIfEmpty(Mono.error(
+                        () -> new UnsupportedOperationException("error.unsupported_device_gateway_provider")
+                    ))
+                    .flatMap(gatewayProvider -> gatewayProvider.createDeviceGateway(entity.toProperties())))
+            .then();
     }
 
     @Override
@@ -164,12 +169,12 @@ public class DeviceGatewayEventHandler implements CommandLineRunner {
                     .createQuery()
                     .where()
                     .and(DeviceGatewayEntity::getState, DeviceGatewayState.enabled)
-                    .fetch()
+                    .fetch()    // 查询所有状态为已启用的网关
                     .map(DeviceGatewayEntity::getId)
                     .flatMap(id -> Mono
                         .defer(() -> deviceGatewayManager
-                            .getGateway(id)
-                            .flatMap(DeviceGateway::startup))
+                            .getGateway(id) // 根据id获取网关实例
+                            .flatMap(DeviceGateway::startup))   // 启动网关
                         .onErrorResume((err) -> {
                             log.error(err.getMessage(), err);
                             return Mono.empty();

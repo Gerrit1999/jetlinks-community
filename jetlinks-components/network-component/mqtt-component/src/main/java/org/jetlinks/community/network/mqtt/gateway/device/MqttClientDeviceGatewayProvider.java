@@ -1,10 +1,5 @@
 package org.jetlinks.community.network.mqtt.gateway.device;
 
-import org.jetlinks.core.ProtocolSupports;
-import org.jetlinks.core.device.DeviceRegistry;
-import org.jetlinks.core.device.session.DeviceSessionManager;
-import org.jetlinks.core.message.codec.DefaultTransport;
-import org.jetlinks.core.message.codec.Transport;
 import org.jetlinks.community.gateway.DeviceGateway;
 import org.jetlinks.community.gateway.supports.DeviceGatewayProperties;
 import org.jetlinks.community.gateway.supports.DeviceGatewayProvider;
@@ -12,6 +7,11 @@ import org.jetlinks.community.network.DefaultNetworkType;
 import org.jetlinks.community.network.NetworkManager;
 import org.jetlinks.community.network.NetworkType;
 import org.jetlinks.community.network.mqtt.client.MqttClient;
+import org.jetlinks.core.ProtocolSupports;
+import org.jetlinks.core.device.DeviceRegistry;
+import org.jetlinks.core.device.session.DeviceSessionManager;
+import org.jetlinks.core.message.codec.DefaultTransport;
+import org.jetlinks.core.message.codec.Transport;
 import org.jetlinks.supports.server.DecodedClientMessageHandler;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
@@ -84,7 +84,7 @@ public class MqttClientDeviceGatewayProvider implements DeviceGatewayProvider {
         MqttClientDeviceGateway deviceGateway = ((MqttClientDeviceGateway) gateway);
 
         String networkId = properties.getChannelId();
-        //网络组件发生了变化
+        // 网络组件发生了变化
         if (!Objects.equals(networkId, deviceGateway.mqttClient.getId())) {
             return gateway
                 .shutdown()
@@ -92,7 +92,7 @@ public class MqttClientDeviceGatewayProvider implements DeviceGatewayProvider {
                           .createDeviceGateway(properties)
                           .flatMap(gate -> gate.startup().thenReturn(gate)));
         }
-        //更新协议包
+        // 更新协议包
         deviceGateway.setProtocol(protocolSupports.getProtocol(properties.getProtocol()));
         return deviceGateway
             .reload()

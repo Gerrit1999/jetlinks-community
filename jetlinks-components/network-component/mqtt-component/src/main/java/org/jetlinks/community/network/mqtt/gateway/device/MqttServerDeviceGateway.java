@@ -12,12 +12,21 @@ import org.jetlinks.community.network.mqtt.server.MqttConnection;
 import org.jetlinks.community.network.mqtt.server.MqttPublishing;
 import org.jetlinks.community.network.mqtt.server.MqttServer;
 import org.jetlinks.community.utils.ObjectMappers;
-import org.jetlinks.community.utils.SystemUtils;
 import org.jetlinks.core.ProtocolSupport;
-import org.jetlinks.core.device.*;
+import org.jetlinks.core.device.AuthenticationRequest;
+import org.jetlinks.core.device.AuthenticationResponse;
+import org.jetlinks.core.device.DeviceOperator;
+import org.jetlinks.core.device.DeviceRegistry;
+import org.jetlinks.core.device.DeviceThingType;
+import org.jetlinks.core.device.MqttAuthenticationRequest;
 import org.jetlinks.core.device.session.DeviceSessionManager;
 import org.jetlinks.core.message.DeviceMessage;
-import org.jetlinks.core.message.codec.*;
+import org.jetlinks.core.message.codec.DefaultTransport;
+import org.jetlinks.core.message.codec.DeviceMessageCodec;
+import org.jetlinks.core.message.codec.FromDeviceMessageContext;
+import org.jetlinks.core.message.codec.MessageDecodeContext;
+import org.jetlinks.core.message.codec.MqttMessage;
+import org.jetlinks.core.message.codec.Transport;
 import org.jetlinks.core.server.session.DeviceSession;
 import org.jetlinks.core.server.session.KeepOnlineSession;
 import org.jetlinks.core.trace.FluxTracer;
@@ -109,35 +118,37 @@ class MqttServerDeviceGateway extends AbstractDeviceGateway {
             disposable.dispose();
         }
         disposable = mqttServer
-            //监听连接,mqtt网关可以复用网络网络组件,多个网关不能收到相同的连接信息
+            // 监听连接, mqtt网关可以复用网络网络组件, 多个网关不能收到相同的连接信息
             .handleConnection("device-gateway")
             .filter(conn -> {
-                //暂停或者已停止时.
+                // 暂停或者已停止时
                 if (!isStarted()) {
-                    //直接响应SERVER_UNAVAILABLE
+                    // 直接响应SERVER_UNAVAILABLE
                     conn.reject(MqttConnectReturnCode.CONNECTION_REFUSED_SERVER_UNAVAILABLE);
                     monitor.rejected();
                 }
                 return true;
             })
-            //处理mqtt连接请求
+            // 处理mqtt连接请求
             .flatMap(connection -> this
-                         .handleConnection(connection)
-                         .flatMap(tuple3 -> handleAuthResponse(tuple3.getT1(), tuple3.getT2(), tuple3.getT3()))
-                         .flatMap(tp -> handleAcceptedMqttConnection(tp.getT1(), tp.getT2(), tp.getT3()))
-                         .onErrorResume(err -> {
-                             log.error(err.getMessage(), err);
-                             return Mono.empty();
-                         })
-                         .as(MonoTracer
-                                 .create(SpanName.connection(connection.getClientId()),
-                                         builder -> {
-                                             builder.setAttribute(clientId, connection.getClientId());
-                                             builder.setAttribute(SpanKey.address, connection.getClientAddress().toString());
-                                         })),
-                     Integer.MAX_VALUE)
+                    // 处理连接, 并使用自定义协议进行认证
+                    .handleConnection(connection)
+                    // 处理认证结果(监听连接断开, 监控网关信息等)
+                    .flatMap(tuple3 -> handleAuthResponse(tuple3.getT1(), tuple3.getT2(), tuple3.getT3()))
+                    // 处理已经建立连接的MQTT连接(解码消息)
+                    .flatMap(tp -> handleAcceptedMqttConnection(tp.getT1(), tp.getT2(), tp.getT3()))
+                    .onErrorResume(err -> {
+                        log.error(err.getMessage(), err);
+                        return Mono.empty();
+                    })
+                    .as(MonoTracer
+                        .create(SpanName.connection(connection.getClientId()),
+                            builder -> {
+                                builder.setAttribute(clientId, connection.getClientId());
+                                builder.setAttribute(SpanKey.address, connection.getClientAddress().toString());
+                            })),
+                Integer.MAX_VALUE)
             .subscribe();
-
     }
 
     //处理连接，并进行认证
@@ -147,9 +158,9 @@ class MqttServerDeviceGateway extends AbstractDeviceGateway {
             .justOrEmpty(connection.getAuth())
             .flatMap(auth -> {
                 MqttAuthenticationRequest request = new MqttAuthenticationRequest(connection.getClientId(),
-                                                                                  auth.getUsername(),
-                                                                                  auth.getPassword(),
-                                                                                  getTransport());
+                    auth.getUsername(),
+                    auth.getPassword(),
+                    getTransport());
                 return supportMono
                     //使用自定义协议来认证
                     .map(support -> support.authenticate(request, registry))
@@ -173,21 +184,21 @@ class MqttServerDeviceGateway extends AbstractDeviceGateway {
                     ;
             })
             .as(MonoTracer
-                    .create(SpanName.auth(connection.getClientId()),
-                            (span, tp3) -> {
-                                AuthenticationResponse response = tp3.getT2();
-                                if (!response.isSuccess()) {
-                                    span.setStatus(StatusCode.ERROR, response.getMessage());
-                                }
-                            },
-                            (span, hasValue) -> {
-                                //empty
-                                if (!hasValue) {
-                                    span.setStatus(StatusCode.ERROR, "device not exists");
-                                }
-                                span.setAttribute(SpanKey.address, connection.getClientAddress().toString());
-                                span.setAttribute(clientId, connection.getClientId());
-                            }))
+                .create(SpanName.auth(connection.getClientId()),
+                    (span, tp3) -> {
+                        AuthenticationResponse response = tp3.getT2();
+                        if (!response.isSuccess()) {
+                            span.setStatus(StatusCode.ERROR, response.getMessage());
+                        }
+                    },
+                    (span, hasValue) -> {
+                        //empty
+                        if (!hasValue) {
+                            span.setStatus(StatusCode.ERROR, "device not exists");
+                        }
+                        span.setAttribute(SpanKey.address, connection.getClientAddress().toString());
+                        span.setAttribute(clientId, connection.getClientId());
+                    }))
             //设备认证错误,拒绝连接
             .onErrorResume((err) -> Mono.fromRunnable(() -> {
                 log.error("MQTT连接认证[{}]失败", connection.getClientId(), err);
@@ -245,7 +256,7 @@ class MqttServerDeviceGateway extends AbstractDeviceGateway {
                                 })
                                 .defaultIfEmpty(newSession);
                         })
-                        .mapNotNull(session->{
+                        .mapNotNull(session -> {
                             try {
                                 return Tuples.of(connection.accept(), device, session.unwrap(MqttConnectionSession.class));
                             } catch (IllegalStateException ignore) {
@@ -283,27 +294,27 @@ class MqttServerDeviceGateway extends AbstractDeviceGateway {
                                                     MqttConnectionSession session) {
         return Flux
             .usingWhen(Mono.just(connection),
-                       MqttConnection::handleMessage,
-                       MqttConnection::close)
-            //网关暂停或者已停止时,则不处理消息
+                MqttConnection::handleMessage,
+                MqttConnection::close)
+            // 网关暂停或者已停止时,则不处理消息
             .filter(pb -> isStarted())
-            //解码收到的mqtt报文
+            // 解码收到的mqtt报文
             .flatMap(publishing -> this
                 .decodeAndHandleMessage(operator, session, publishing, connection)
                 .as(MonoTracer
-                        .create(SpanName.upstream(connection.getClientId()),
-                                (span) -> span.setAttribute(SpanKey.message, publishing.print())))
+                    .create(SpanName.upstream(connection.getClientId()),
+                        (span) -> span.setAttribute(SpanKey.message, publishing.print())))
             )
-            //合并遗言消息
+            // 合并遗言消息
             .mergeWith(
                 Mono.justOrEmpty(connection.getWillMessage())
-                    //解码遗言消息
+                    // 解码遗言消息
                     .flatMap(mqttMessage -> this.decodeAndHandleMessage(operator, session, mqttMessage, connection))
             )
             .then();
     }
 
-    //解码消息并处理
+    // 解码消息并处理
     private Mono<Void> decodeAndHandleMessage(DeviceOperator operator,
                                               MqttConnectionSession session,
                                               MqttMessage message,
@@ -313,11 +324,11 @@ class MqttServerDeviceGateway extends AbstractDeviceGateway {
         return operator
             .getProtocol()
             .flatMap(protocol -> protocol.getMessageCodec(getTransport()))
-            //解码
+            // 解码
             .flatMapMany(codec -> codec.decode(FromDeviceMessageContext.of(session, message, registry)))
             .cast(DeviceMessage.class)
             .flatMap(msg -> {
-                //回填deviceId,有的场景协议包不能或者没有解析出deviceId,则直接使用连接对应的设备id进行填充.
+                // 回填deviceId, 有的场景协议包不能或者没有解析出deviceId, 则直接使用连接对应的设备id进行填充
                 if (!StringUtils.hasText(msg.getDeviceId())) {
                     msg.thingId(DeviceThingType.device, operator.getDeviceId());
                 }
@@ -329,9 +340,9 @@ class MqttServerDeviceGateway extends AbstractDeviceGateway {
                 }
             })
             .as(FluxTracer
-                    .create(SpanName.decode(operator.getDeviceId()),
-                            (span, msg) -> span.setAttribute(SpanKey.message, toJsonString(msg.toJson()))))
-            //发生错误不中断流
+                .create(SpanName.decode(operator.getDeviceId()),
+                    (span, msg) -> span.setAttribute(SpanKey.message, toJsonString(msg.toJson()))))
+            // 发生错误不中断流
             .onErrorResume((err) -> {
                 log.error("handle mqtt message [{}] error:{}", operator.getDeviceId(), message, err);
                 return Mono.empty();
@@ -341,7 +352,7 @@ class MqttServerDeviceGateway extends AbstractDeviceGateway {
     }
 
     @SneakyThrows
-    private String toJsonString(Object data){
+    private String toJsonString(Object data) {
         return ObjectMappers.JSON_MAPPER.writeValueAsString(data);
     }
 
@@ -357,18 +368,16 @@ class MqttServerDeviceGateway extends AbstractDeviceGateway {
         }
         //统一处理解码后的设备消息
         return helper.handleDeviceMessage(message,
-                                          device -> new MqttConnectionSession(device.getDeviceId(),
-                                                                              device,
-                                                                              getTransport(),
-                                                                              connection,
-                                                                              monitor),
-                                          session -> {
+                device -> new MqttConnectionSession(device.getDeviceId(),
+                    device,
+                    getTransport(),
+                    connection,
+                    monitor),
+                session -> {
 
-                                          },
-                                          () -> {
-                                              log.warn("无法从MQTT[{}]消息中获取设备信息:{}", connection.getClientId(), message);
-                                          })
-                     .thenReturn(message);
+                },
+                () -> log.warn("无法从MQTT[{}]消息中获取设备信息:{}", connection.getClientId(), message))
+            .thenReturn(message);
     }
 
     @Override

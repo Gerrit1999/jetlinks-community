@@ -58,9 +58,9 @@ public class DefaultDeviceGatewayManager implements DeviceGatewayManager {
 
     public Mono<Void> doShutdown(String gatewayId) {
         return Mono.justOrEmpty(store.remove(gatewayId))
-                   .flatMap(DeviceGateway::shutdown)
-                   .doOnSuccess(nil -> log.debug("shutdown device gateway {}", gatewayId))
-                   .doOnError(err -> log.error("shutdown device gateway {} error", gatewayId, err));
+            .flatMap(DeviceGateway::shutdown)
+            .doOnSuccess(nil -> log.debug("shutdown device gateway {}", gatewayId))
+            .doOnError(err -> log.error("shutdown device gateway {} error", gatewayId, err));
     }
 
     @Override
@@ -140,7 +140,7 @@ public class DefaultDeviceGatewayManager implements DeviceGatewayManager {
             return Mono.empty();
         }
         return Mono.justOrEmpty(channels.get(channel))
-                   .flatMap(provider -> provider.getChannelInfo(channelId));
+            .flatMap(provider -> provider.getChannelInfo(channelId));
     }
 
 }
